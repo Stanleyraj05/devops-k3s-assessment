@@ -38,7 +38,7 @@ sudo chown $(id -u):$(id -g) ~/.kube/config
 
 # Install Helm
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-🚀 2. Application Deployment (Open WebUI)
+ 2. Application Deployment (Open WebUI)
 Deployed Open WebUI using the official Helm chart.
 
 bash
@@ -53,7 +53,7 @@ helm upgrade --install webui open-webui/open-webui \
   --create-namespace \
   --set service.type=ClusterIP
 Part 3 & 4: Debugging the SSL Failure (Intentional)
-❌ Issue Summary
+ Issue Summary
 After enabling OIDC authentication pointing to:
 
 arduino
@@ -61,38 +61,35 @@ Copy code
 https://46.62.233.25/auth/realms/hyperplane/
 Open WebUI failed authentication due to SSL validation failure.
 
-🔍 Diagnosis
+ Diagnosis
 Checked logs
 No crash — only connection warnings.
 
 Reproduced inside pod
 Manually tested Python requests from inside pod:
 
-bash
-Copy code
 kubectl exec -it -n openwebui open-webui-0 -- /bin/bash
 python -c "import requests; print(requests.get('https://46.62.233.25/auth/realms/hyperplane/.well-known/openid-configuration').text)"
+
 Error Returned
 
 yaml
-Copy code
 ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED]
 certificate verify failed: self-signed certificate
-🧠 Root Cause
+ Root Cause
 OIDC provider (Keycloak) uses a self-signed certificate.
 Python requests rejects untrusted certs by default.
 
-🛠️ Fix — Production-Grade Solution
+ Fix — Production-Grade Solution
 Instead of disabling SSL verification, I added the custom CA to the container trust store.
 
 Step 1 — Fetch Certificate
-bash
-Copy code
+
 openssl s_client -showcerts -connect 46.62.233.25:443 </dev/null 2>/dev/null \
   | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > oidc-ca.crt
+
 Step 2 — Create Kubernetes Secret
-bash
-Copy code
+
 kubectl create secret generic oidc-ca \
   --from-file=oidc-ca.crt=oidc-ca.crt \
   -n openwebui
@@ -115,16 +112,16 @@ extraEnv:
     value: /etc/ssl/certs/oidc-ca.crt
   - name: SSL_CERT_FILE
     value: /etc/ssl/certs/oidc-ca.crt
+
 Step 4 — Deploy Patch
-bash
-Copy code
+
 helm upgrade webui open-webui/open-webui \
   -n openwebui \
   -f values-oidc.yaml
-✔️ OIDC successfully authenticated after rollout.
+ OIDC successfully authenticated after rollout.
 
 Part 5: Ownership & Architecture Answers
-🔐 1. Production Readiness
+ 1. Production Readiness
 Top 5 Risks:
 Single point of failure (one-node k3s)
 
@@ -141,7 +138,7 @@ Implement backups (Velero/S3 snapshots)
 
 Deploy Traefik or Nginx + Cert-Manager for Let's Encrypt certs
 
-⚠️ 2. Failure Scenario — Traffic Spike & Node Down at 2AM
+ 2. Failure Scenario — Traffic Spike & Node Down at 2AM
 What breaks first:
 CPU/memory → OOMKill → API server unavailable.
 
@@ -159,7 +156,7 @@ Add Horizontal Pod Autoscaling (HPA)
 
 Add Load Balancer in front
 
-🔑 3. Secret Management
+ 3. Secret Management
 Proper method:
 External Secrets Operator (AWS SM, Vault)
 
@@ -181,7 +178,7 @@ SSH keys
 
 DB credentials
 
-💾 4. Backup & Recovery
+ 4. Backup & Recovery
 What to back up:
 PVCs (Vector DB, user data)
 
@@ -197,7 +194,7 @@ Monthly “Game Day”
 
 Restore into fresh cluster and validate
 
-💲 5. Cost Ownership (Hetzner)
+ 5. Cost Ownership (Hetzner)
 Keep costs low:
 Use Hetzner Cloud resources efficiently
 
@@ -214,15 +211,14 @@ HA control plane needed
 
 Team size increases
 
-📌 Required Outputs
+ Required Outputs
 kubectl get nodes
 pgsql
 Copy code
 NAME             STATUS   ROLES                  AGE     VERSION
 rstaneleyraj05   Ready    control-plane,master   3h20m   v1.30.2+k3s1
+
 kubectl get all -n openwebui
-powershell
-Copy code
 NAME                                       READY   STATUS    RESTARTS   AGE
 pod/open-webui-0                           1/1     Running   0          5m
 pod/open-webui-ollama-5d99896fd7-f59xv     1/1     Running   0          3h
